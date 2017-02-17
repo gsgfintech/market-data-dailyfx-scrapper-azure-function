@@ -1,0 +1,12 @@
+﻿{
+  "frameworks": {
+    "net46":{
+      "dependencies": {
+        "AngleSharp": "0.9.9",
+        "RestSharp": "105.2.3",
+        "Capital.GSG.FX.Data.Core": "1.16.0",
+        "Capital.GSG.FX.Utils.Core": "1.2.0"
+      }
+    }
+  }
+}
