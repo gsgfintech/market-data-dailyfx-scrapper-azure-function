@@ -1,12 +1,19 @@
 ﻿using AngleSharp.Parser.Html;
 using Capital.GSG.FX.Data.Core.ContractData;
 using Capital.GSG.FX.Data.Core.MarketData;
-using Capital.GSG.FX.Utils.Core;
+using Capital.GSG.FX.InfluxDBConnector;
 using Capital.GSG.FX.Monitoring.Server.Connector;
+using Capital.GSG.FX.Utils.Core;
 using RestSharp;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.Linq;
 using System.Net;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
 
 private const string DailyFX = "https://www.dailyfx.com";
 private const string CalendarEndpoint = "/calendar";
@@ -26,6 +33,8 @@ public static void Run(TimerInfo myTimer, TraceWriter log)
         try
         {
             PostEventsToMonitoringBackendServer(events).Wait();
+
+            InsertEventsInInfluxDb(events).Wait();
         }
         catch (Exception ex)
         {
@@ -175,18 +184,13 @@ private static async Task PostEventsToMonitoringBackendServer(List<FXEvent> even
         DateTimeOffset min = events.Select(e => e.Timestamp).Min();
         DateTimeOffset max = events.Select(e => e.Timestamp).Max();
 
-        //string clientId = ConfigurationManager.AppSettings["MonitorDaemon:ClientId"];
-        //string appKey = ConfigurationManager.AppSettings["MonitorDaemon:AppKey"];
+        string clientId = GetEnvironmentVariable("Monitoring:ClientId");
+        string appKey = GetEnvironmentVariable("Monitoring:AppKey");
 
-        //string backendAddress = ConfigurationManager.AppSettings["MonitorServerBackend:Address"];
-        //string backendAppUri = ConfigurationManager.AppSettings["MonitorServerBackend:AppUri"];
-        string clientId = "";
-        string appKey = "";
+        string backendAddress = GetEnvironmentVariable("Monitoring:BackendAddress");
+        string backendAppUri = GetEnvironmentVariable("Monitoring:BackendAppIdUri");
 
-        string backendAddress = "";
-        string backendAppUri = "";
-
-        BackendFXEventsConnector connector = (new MonitoringServerConnector(backendAddress, appKey, backendAddress, backendAppUri)).FXEventsConnector;
+        BackendFXEventsConnector connector = (new MonitoringServerConnector(clientId, appKey, backendAddress, backendAppUri)).FXEventsConnector;
 
         List<FXEvent> existing = await connector.GetInTimeRange(min, max);
 
@@ -263,9 +267,83 @@ private static async Task PostEventsToMonitoringBackendServer(List<FXEvent> even
     }
 }
 
+private static async Task InsertEventsInInfluxDb(IEnumerable<FXEvent> events)
+{
+    try
+    {
+        InfluxDBServer dbServer = SetupInfluxDbServer();
+
+        if (dbServer != null)
+        {
+            int successCount = 0;
+            int failedCount = 0;
+
+            logger.Info($"About to add/update {events.Count()} FX Events");
+
+            CancellationTokenSource cts;
+
+            foreach (var fxEvent in events)
+            {
+                try
+                {
+                    cts = new CancellationTokenSource();
+                    cts.CancelAfter(TimeSpan.FromSeconds(10));
+
+                    var result = await dbServer.FXEventsActioner.Insert(fxEvent, cts.Token);
+
+                    if (result.Success)
+                        logger.Info($"Successfully added/updated {fxEvent} in the database (success: {++successCount}, failed: {failedCount})");
+                    else
+                        logger.Error($"Failed to add/update {fxEvent} in the database (success: {successCount}, failed: {++failedCount}): {result.Message}");
+                }
+                catch (Exception ex)
+                {
+                    logger.Error($"Failed to add/update {fxEvent} in the database (success: {successCount}, failed: {++failedCount}): {ex.Message}");
+                }
+            }
+
+            if (successCount > 0 && failedCount == 0)
+                logger.Info($"Successfully added/updated {events.Count()} FX Events");
+            else
+                logger.Error($"Failed to add/update {events.Count()} events in the database (success: {successCount}, failed: {failedCount})");
+        }
+        else
+            logger.Error("Found no event to process. Will exit");
+    }
+    catch (Exception ex)
+    {
+        logger.Error($"Failed to insert events in InfluxDB: {ex.Message}");
+    }
+}
+
+private static InfluxDBServer SetupInfluxDbServer()
+{
+    try
+    {
+        string host = GetEnvironmentVariable("InfluxDB:Host");
+        string dbName = GetEnvironmentVariable("InfluxDB:Name");
+        string user = GetEnvironmentVariable("InfluxDB:User");
+        string password = GetEnvironmentVariable("InfluxDB:Password");
+
+        logger.Info($"Setup InfluxDB on {host}/{dbName} with user {user}");
+
+        return new InfluxDBServer(host, user, password, dbName);
+    }
+    catch (Exception ex)
+    {
+        logger.Error($"Failed to setup InfluxDB server: {ex.Message}");
+        return null;
+    }
+}
+
 private static string FormatFXEvent(FXEvent fxEvent)
 {
     return $"{fxEvent.Timestamp:dd/MM/yy HH:mm:ss zzz} - {fxEvent.Currency} - {fxEvent.Title}";
+}
+
+private static string GetEnvironmentVariable(string name)
+{
+    return Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Process);
 }
 
 private class FXEventTimeComparer : IComparer<FXEvent>
