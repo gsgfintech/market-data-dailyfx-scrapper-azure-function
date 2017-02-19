@@ -216,7 +216,12 @@ private static async Task PostEventsToMonitoringBackendServer(List<FXEvent> even
                 logger.Info($"Found {toAdd.Count()} new events that are not in DB. Will add them");
 
                 foreach (var fxEvent in toAdd)
-                    logger.Info($"\t{FormatFXEvent(fxEvent)}");
+                {
+                    var result = await connector.AddOrUpdate(fxEvent);
+
+                    if (!result.Success)
+                        logger.Error($"Failed to add event '{fxEvent.Title}': {result.Message}");
+                }
 
                 toProcess.AddRange(toAdd);
             }
@@ -253,7 +258,12 @@ private static async Task PostEventsToMonitoringBackendServer(List<FXEvent> even
             if (!toProcess.IsNullOrEmpty())
             {
                 foreach (var fxEvent in toProcess)
-                    await connector.AddOrUpdate(fxEvent);
+                {
+                    var result = await connector.AddOrUpdate(fxEvent);
+
+                    if (!result.Success)
+                        logger.Error($"Failed to add event '{fxEvent.Title}': {result.Message}");
+                }
 
                 logger.Info($"Successfully processed {toProcess.Count} events");
             }

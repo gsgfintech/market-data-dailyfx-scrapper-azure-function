@@ -201,7 +201,12 @@ namespace DailyFXScrapperConsoleApp.ScrapFXEvents
                     logger.Info("Found no existing events in DB. Will add the whole batch as new events");
 
                     foreach (var fxEvent in events)
-                        await connector.AddOrUpdate(fxEvent);
+                    {
+                        var result = await connector.AddOrUpdate(fxEvent);
+
+                        if (!result.Success)
+                            logger.Error($"Failed to add event '{fxEvent.Title}': {result.Message}");
+                    }
 
                     logger.Info($"Successfully processed {events.Count} events");
                 }
@@ -255,7 +260,12 @@ namespace DailyFXScrapperConsoleApp.ScrapFXEvents
                     if (!toProcess.IsNullOrEmpty())
                     {
                         foreach (var fxEvent in toProcess)
-                            await connector.AddOrUpdate(fxEvent);
+                        {
+                            var result = await connector.AddOrUpdate(fxEvent);
+
+                            if (!result.Success)
+                                logger.Error($"Failed to add event '{fxEvent.Title}': {result.Message}");
+                        }
 
                         logger.Info($"Successfully processed {toProcess.Count} events");
                     }

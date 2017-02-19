@@ -7,7 +7,7 @@
         "Capital.GSG.FX.Data.Core": "1.16.0",
         "Capital.GSG.FX.Utils.Core": "1.2.0",
         "InfluxDBConnector": "3.1.1",
-        "Monitoring.Server.Connector": "3.1.1"
+        "Monitoring.Server.Connector": "3.2.0"
       }
     }
   }
