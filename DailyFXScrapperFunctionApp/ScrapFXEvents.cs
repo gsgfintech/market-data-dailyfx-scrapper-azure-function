@@ -11,8 +11,6 @@ using Capital.GSG.FX.Data.Core.ContractData;
 using System.Threading.Tasks;
 using System.Linq;
 using Capital.GSG.FX.Monitoring.Server.Connector;
-using Capital.GSG.FX.InfluxDBConnector;
-using System.Threading;
 
 namespace DailyFXScrapperFunctionApp
 {
@@ -62,7 +60,7 @@ namespace DailyFXScrapperFunctionApp
                     PostEventsToMonitoringBackendServer(events, clientId, appKey, prodBackendAddress, prodBackendAppUri, log).Wait();
                     #endregion
 
-                    //InsertEventsInInfluxDb(events, log).Wait();
+                    InsertEventsInInfluxDb(events, clientId, appKey, prodBackendAddress, prodBackendAppUri, log).Wait();
                 }
                 catch (Exception ex)
                 {
@@ -304,72 +302,26 @@ namespace DailyFXScrapperFunctionApp
             }
         }
 
-        private static async Task InsertEventsInInfluxDb(IEnumerable<FXEvent> events, TraceWriter log)
+        private static async Task InsertEventsInInfluxDb(IEnumerable<FXEvent> events, string clientId, string appKey, string backendAddress, string backendAppUri, TraceWriter log)
         {
             try
             {
-                InfluxDBServer dbServer = SetupInfluxDbServer(log);
+                BackendFXEventsConnector connector = (new MonitoringServerConnector(clientId, appKey, backendAddress, backendAppUri)).FXEventsConnector;
 
-                if (dbServer != null)
-                {
-                    int successCount = 0;
-                    int failedCount = 0;
+                string host = GetEnvironmentVariable("InfluxDB:Host");
+                string dbName = GetEnvironmentVariable("InfluxDB:Name");
+                string user = GetEnvironmentVariable("InfluxDB:User");
 
-                    log.Info($"About to add/update {events.Count()} FX Events");
+                var result = await connector.InsertInOnSiteInfluxDB(events, host, dbName, user);
 
-                    CancellationTokenSource cts;
-
-                    foreach (var fxEvent in events)
-                    {
-                        try
-                        {
-                            cts = new CancellationTokenSource();
-                            cts.CancelAfter(TimeSpan.FromSeconds(10));
-
-                            var result = await dbServer.FXEventsActioner.Insert(fxEvent, cts.Token);
-
-                            if (result.Success)
-                                log.Info($"Successfully added/updated {fxEvent} in the database (success: {++successCount}, failed: {failedCount})");
-                            else
-                                log.Error($"Failed to add/update {fxEvent} in the database (success: {successCount}, failed: {++failedCount}): {result.Message}");
-                        }
-                        catch (Exception ex)
-                        {
-                            log.Error($"Failed to add/update {fxEvent} in the database (success: {successCount}, failed: {++failedCount}): {ex.Message}");
-                        }
-                    }
-
-                    if (successCount > 0 && failedCount == 0)
-                        log.Info($"Successfully added/updated {events.Count()} FX Events");
-                    else
-                        log.Error($"Failed to add/update {events.Count()} events in the database (success: {successCount}, failed: {failedCount})");
-                }
+                if (result.Success)
+                    log.Info($"Successfully added/updated {events.Count()} in onsite InfluxDB");
                 else
-                    log.Error("Found no event to process. Will exit");
+                    log.Error($"Failed to add/update {events.Count()} in onsite InfluxDB: {result.Message}");
             }
             catch (Exception ex)
             {
                 log.Error($"Failed to insert events in InfluxDB: {ex.Message}");
-            }
-        }
-
-        private static InfluxDBServer SetupInfluxDbServer(TraceWriter log)
-        {
-            try
-            {
-                string host = GetEnvironmentVariable("InfluxDB:Host");
-                string dbName = GetEnvironmentVariable("InfluxDB:Name");
-                string user = GetEnvironmentVariable("InfluxDB:User");
-                string password = GetEnvironmentVariable("InfluxDB:Password");
-
-                log.Info($"Setup InfluxDB on {host}/{dbName} with user {user}");
-
-                return new InfluxDBServer(host, user, password, dbName);
-            }
-            catch (Exception ex)
-            {
-                log.Error($"Failed to setup InfluxDB server: {ex.Message}");
-                return null;
             }
         }
 
