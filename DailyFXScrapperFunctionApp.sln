@@ -3,11 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26510.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{F388DB11-B1E4-409E-BB60-D63FDBDBB6E9}"
-	ProjectSection(SolutionItems) = preProject
-		.deployment = .deployment
-	EndProjectSection
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DailyFXScrapperConsoleApp", "DailyFXScrapperConsoleApp\DailyFXScrapperConsoleApp.csproj", "{094EE059-6A2F-4C02-AC9A-624865FE413D}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DailyFXScrapperFunctionApp", "DailyFXScrapperFunctionApp\DailyFXScrapperFunctionApp.csproj", "{CEE3B210-14E6-4225-ADDD-0AB1E823378F}"
